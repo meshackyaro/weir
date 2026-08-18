@@ -13,6 +13,7 @@ contract WeirAuction is IWeirAuction {
     error Unauthorized();
     error InvalidAddress();
     error InvalidEpochLength();
+    error PoolAlreadyConfigured();
     error BidBelowReserve();
     error EpochNotStarted();
     error EpochAlreadySettled();
@@ -61,10 +62,14 @@ contract WeirAuction is IWeirAuction {
     }
 
     /// @notice Opens auctions for a pool and anchors its epoch clock to the current block
+    /// @dev Epoch length is fixed at configuration time. Changing it later would renumber every
+    ///      past epoch, orphaning their settlement state and refunds. Use `setReservePrice` to
+    ///      adjust the one parameter that is safe to move.
     function configurePool(PoolId poolId, uint256 _epochBlocks, uint256 _reservePrice) external onlyGovernance {
         if (_epochBlocks == 0) revert InvalidEpochLength();
+        if (startBlock[poolId] != 0) revert PoolAlreadyConfigured();
 
-        if (startBlock[poolId] == 0) startBlock[poolId] = block.number;
+        startBlock[poolId] = block.number;
         epochBlocks[poolId] = _epochBlocks;
         reservePrice[poolId] = _reservePrice;
 
