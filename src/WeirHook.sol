@@ -119,6 +119,11 @@ contract WeirHook is IHooks {
 
     // ============ Liquidity path ============
 
+    /// @dev `sender` is whoever called `modifyLiquidity` — a position manager or router, not
+    ///      necessarily the beneficial owner of the position. Phase 1 credits that address, so a
+    ///      pool fronted by a shared router pools its LPs' rebates at the router. Attributing to
+    ///      the real owner requires the beneficiary threaded through `hookData` by a position
+    ///      manager the pool already trusts.
     function afterAddLiquidity(
         address sender,
         PoolKey calldata key,
