@@ -9,6 +9,7 @@ import {HookMiner} from "v4-periphery-test/shared/HookMiner.sol";
 import {WeirHook} from "../src/WeirHook.sol";
 import {WeirAuction} from "../src/WeirAuction.sol";
 import {RebateVault} from "../src/RebateVault.sol";
+import {WeirPositionRouter} from "../src/WeirPositionRouter.sol";
 import {FairPriceOracle} from "../src/FairPriceOracle.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 
@@ -31,7 +32,16 @@ contract DeployWeir is Script {
 
     uint256 internal constant DEFAULT_PRIORITY_WINDOW = 2;
 
-    function run() external returns (RebateVault vault, WeirAuction auction, WeirHook hook, FairPriceOracle oracle) {
+    function run()
+        external
+        returns (
+            RebateVault vault,
+            WeirAuction auction,
+            WeirHook hook,
+            WeirPositionRouter router,
+            FairPriceOracle oracle
+        )
+    {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         IPoolManager poolManager = IPoolManager(vm.envAddress("POOL_MANAGER"));
         address governance = vm.envOr("GOVERNANCE", vm.addr(pk));
@@ -52,23 +62,31 @@ contract DeployWeir is Script {
         hook = new WeirHook{salt: salt}(poolManager, auction, IRebateVault(address(vault)), governance, priorityWindow);
         require(address(hook) == expected, "DeployWeir: hook address mismatch");
 
-        // The auction funds the vault; the hook reports liquidity to it. Both must be
-        // authorized, and only governance can grant that.
+        router = new WeirPositionRouter(poolManager);
+
+        // The auction funds the vault and the hook reports liquidity to it, so both need vault
+        // authorization; the router needs the hook's trust to name providers. Only governance
+        // can grant either.
         bool deployerIsGovernance = governance == vm.addr(pk);
         if (deployerIsGovernance) {
             vault.setAuthorized(address(auction), true);
             vault.setAuthorized(address(hook), true);
+            hook.setTrustedRouter(address(router), true);
         }
 
         vm.stopBroadcast();
 
         if (!deployerIsGovernance) {
-            console2.log("ACTION REQUIRED: call vault.setAuthorized() for the auction and hook from governance");
+            console2.log("ACTION REQUIRED, from governance:");
+            console2.log("  vault.setAuthorized(auction, true)");
+            console2.log("  vault.setAuthorized(hook, true)");
+            console2.log("  hook.setTrustedRouter(router, true)");
         }
 
         console2.log("RebateVault    ", address(vault));
         console2.log("WeirAuction    ", address(auction));
         console2.log("WeirHook       ", address(hook));
+        console2.log("PositionRouter ", address(router));
         console2.log("FairPriceOracle", address(oracle));
         console2.log("governance     ", governance);
     }

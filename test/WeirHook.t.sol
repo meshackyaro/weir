@@ -37,9 +37,9 @@ contract WeirHookTest is Test, Deployers {
     uint256 internal constant RESERVE_PRICE = 0.01 ether;
     uint256 internal constant WINNING_BID = 0.1 ether;
 
-    /// @dev v4 reports the caller of `modifyLiquidity` as the hook's `sender`, which is the
-    ///      router rather than the person who owns the position. Phase 1 credits that address;
-    ///      see the note on `test_rebatesAccrueToThePositionCaller`.
+    /// @dev These tests drive the pool through the generic v4 test router, which the hook does
+    ///      not trust, so liquidity is credited to the router itself. Provider-level attribution
+    ///      is covered in WeirPositionRouter.t.sol.
     address internal trackedLp;
 
     function setUp() public {
@@ -230,11 +230,10 @@ contract WeirHookTest is Test, Deployers {
         assertEq(vault.pendingRebate(poolId, trackedLp), WINNING_BID);
     }
 
-    /// @dev Documents a Phase 1 limitation rather than an intended feature: because v4 hands the
-    ///      hook the router as `sender`, rebates accrue to whoever called `modifyLiquidity`, not
-    ///      to the position's beneficial owner. Attributing to the real LP needs the beneficiary
-    ///      threaded through `hookData` by a trusted position manager.
-    function test_rebatesAccrueToThePositionCaller() public {
+    /// @dev The fallback path: liquidity added through an untrusted router is credited to that
+    ///      router, since v4 gives the hook no other identity to work with. `WeirPositionRouter`
+    ///      is the supported way to be credited as yourself.
+    function test_untrustedRouterIsCreditedAsItself() public {
         uint256 epoch = _winNextEpoch();
         auction.settleEpoch(poolId, epoch);
 

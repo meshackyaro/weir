@@ -23,6 +23,7 @@ contract WeirHook is IHooks {
 
     event PrioritySlotConsumed(PoolId indexed poolId, uint256 indexed epoch, address indexed winner);
     event PriorityWindowUpdated(uint256 blocks);
+    event TrustedRouterUpdated(address indexed router, bool trusted);
     event GovernanceTransferred(address indexed oldGovernance, address indexed newGovernance);
 
     IPoolManager public immutable poolManager;
@@ -38,6 +39,12 @@ contract WeirHook is IHooks {
 
     /// @notice Tracks whether an epoch's reserved opening swap has already been taken
     mapping(PoolId => mapping(uint256 => bool)) public prioritySlotConsumed;
+
+    /// @notice Routers whose `hookData` may name the liquidity provider a rebate belongs to
+    /// @dev A router earns this only by isolating each caller's liquidity under its own position,
+    ///      the way `WeirPositionRouter` does. Without that, one caller could name a beneficiary
+    ///      on the way in and a different one on the way out.
+    mapping(address => bool) public trustedRouter;
 
     modifier onlyPoolManager() {
         if (msg.sender != address(poolManager)) revert NotPoolManager();
@@ -73,6 +80,12 @@ contract WeirHook is IHooks {
     function setPriorityWindow(uint256 blocks_) external onlyGovernance {
         priorityWindowBlocks = blocks_;
         emit PriorityWindowUpdated(blocks_);
+    }
+
+    function setTrustedRouter(address router, bool trusted) external onlyGovernance {
+        if (router == address(0)) revert InvalidAddress();
+        trustedRouter[router] = trusted;
+        emit TrustedRouterUpdated(router, trusted);
     }
 
     function transferGovernance(address newGovernance) external onlyGovernance {
@@ -119,20 +132,15 @@ contract WeirHook is IHooks {
 
     // ============ Liquidity path ============
 
-    /// @dev `sender` is whoever called `modifyLiquidity` — a position manager or router, not
-    ///      necessarily the beneficial owner of the position. Phase 1 credits that address, so a
-    ///      pool fronted by a shared router pools its LPs' rebates at the router. Attributing to
-    ///      the real owner requires the beneficiary threaded through `hookData` by a position
-    ///      manager the pool already trusts.
     function afterAddLiquidity(
         address sender,
         PoolKey calldata key,
         IPoolManager.ModifyLiquidityParams calldata params,
         BalanceDelta,
         BalanceDelta,
-        bytes calldata
+        bytes calldata hookData
     ) external override onlyPoolManager returns (bytes4, BalanceDelta) {
-        rebateVault.trackLiquidity(key.toId(), sender, params.liquidityDelta);
+        rebateVault.trackLiquidity(key.toId(), _beneficiary(sender, hookData), params.liquidityDelta);
         return (IHooks.afterAddLiquidity.selector, BalanceDelta.wrap(0));
     }
 
@@ -142,10 +150,23 @@ contract WeirHook is IHooks {
         IPoolManager.ModifyLiquidityParams calldata params,
         BalanceDelta,
         BalanceDelta,
-        bytes calldata
+        bytes calldata hookData
     ) external override onlyPoolManager returns (bytes4, BalanceDelta) {
-        rebateVault.trackLiquidity(key.toId(), sender, params.liquidityDelta);
+        rebateVault.trackLiquidity(key.toId(), _beneficiary(sender, hookData), params.liquidityDelta);
         return (IHooks.afterRemoveLiquidity.selector, BalanceDelta.wrap(0));
+    }
+
+    /// @notice Who a liquidity change should earn rebates for
+    /// @dev v4 reports the caller of `modifyLiquidity` as `sender`, which is a router rather than
+    ///      the person who owns the position. A trusted router names that person in `hookData`;
+    ///      anyone else is credited as themselves, so an untrusted caller can never redirect a
+    ///      rebate or, worse, decrement a stranger's tracked liquidity.
+    function _beneficiary(address sender, bytes calldata hookData) private view returns (address) {
+        if (trustedRouter[sender] && hookData.length == 32) {
+            address declared = abi.decode(hookData, (address));
+            if (declared != address(0)) return declared;
+        }
+        return sender;
     }
 
     // ============ Unused callbacks ============
