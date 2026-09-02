@@ -19,6 +19,26 @@ Two gaps in what exists today:
 1. **They need their own venue.** Systems that already return auction proceeds to LPs run a separate DEX with its own clearing-price matching engine. Weir ships as a single composable hook — any v4 pool can adopt it directly, no new venue, no liquidity migration.
 2. **Their bids are public.** Plaintext priority auctions let searchers observe each other and shade their bids, which suppresses what LPs ultimately collect. Weir replaces the bid value with a Fhenix CoFHE ciphertext, so no competitor sees a rival's bid before the epoch closes and only the winning bid is ever decrypted.
 
+## Partner integrations
+
+Weir integrates two hookathon partners. Both are load-bearing — remove either and the mechanism it supports stops working.
+
+### Fhenix — CoFHE
+
+`WeirSealedAuction` holds the running highest bid and the address holding it as CoFHE ciphertexts (`euint128`, `eaddress`), folded forward with homomorphic comparison and `FHE.select` as each bid arrives. Only the winning pair is ever decrypted, via `FHE.decrypt` and read back with `FHE.getDecryptResultSafe`. Losing bids stay sealed permanently.
+
+This is the project's differentiator, and it dictated two structural decisions documented under [Sealed bids](#sealed-bids): collateral is posted separately from the bid, because a matching `msg.value` would publish it; and bidding runs two epochs ahead, because CoFHE decrypts asynchronously and a winner must be on record before their epoch begins.
+
+Built against `cofhe-contracts` v0.0.13 and tested against Fhenix's `cofhe-mock-contracts`, which reproduce the asynchronous decryption the live coprocessor imposes. `demo/weir.mjs` encrypts bids with `cofhejs` — a sealed bid cannot be produced from Solidity, since CoFHE only accepts a ciphertext its verifier has signed.
+
+### Chainlink — Price Feeds and Automation
+
+**Price Feeds.** `FairPriceOracle` wraps `AggregatorV3` with staleness and decimal normalisation, and `WeirAuctionBase.reservePrice` uses it to keep the auction's reserve worth a fixed amount as ETH moves. See [The reserve floor](#the-reserve-floor).
+
+**Automation.** `WeirKeeper` is an `AutomationCompatible` upkeep that closes and settles each sealed epoch on schedule. The sealed auction has two transactions per epoch that nobody has a private reason to send on time, and a winner has to be decrypted before their epoch starts — Automation is what makes that deadline somebody's job. See [Who closes and settles](#who-closes-and-settles).
+
+No other partner integrations.
+
 ## Architecture
 
 | Contract | Role |
