@@ -17,6 +17,10 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
     "solmate/=lib/v4-core/lib/solmate/",
     "ds-test/=lib/forge-std/lib/ds-test/src/",
+    "@fhenixprotocol/cofhe-contracts/=lib/cofhe-contracts/contracts/",
+    "@fhenixprotocol/cofhe-mock-contracts/=lib/cofhe-mock-contracts/contracts/",
+    "cofhe-mocks/=lib/cofhe-mock-contracts/contracts/",
+    "hardhat/=lib/forge-std/src/",
 ]
 
 [rpc_endpoints]

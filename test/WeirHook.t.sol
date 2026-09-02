@@ -16,6 +16,7 @@ import {HookMiner} from "v4-periphery-test/shared/HookMiner.sol";
 import {WeirHook} from "../src/WeirHook.sol";
 import {WeirAuction} from "../src/WeirAuction.sol";
 import {RebateVault} from "../src/RebateVault.sol";
+import {IWeirAuction} from "../src/interfaces/IWeirAuction.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 
 /// @notice Exercises WeirHook against a real PoolManager, through the same routers a
@@ -52,10 +53,14 @@ contract WeirHookTest is Test, Deployers {
         uint160 flags =
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG);
 
-        bytes memory args = abi.encode(manager, auction, IRebateVault(address(vault)), address(this), PRIORITY_WINDOW);
+        bytes memory args = abi.encode(
+            manager, IWeirAuction(address(auction)), IRebateVault(address(vault)), address(this), PRIORITY_WINDOW
+        );
         (address hookAddress, bytes32 salt) = HookMiner.find(address(this), flags, type(WeirHook).creationCode, args);
 
-        hook = new WeirHook{salt: salt}(manager, auction, IRebateVault(address(vault)), address(this), PRIORITY_WINDOW);
+        hook = new WeirHook{salt: salt}(
+            manager, IWeirAuction(address(auction)), IRebateVault(address(vault)), address(this), PRIORITY_WINDOW
+        );
         require(address(hook) == hookAddress, "hook address mismatch");
 
         vault.setAuthorized(address(hook), true);

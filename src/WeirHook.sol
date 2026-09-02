@@ -7,7 +7,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/types/BeforeSwapDelta.sol";
-import {WeirAuction} from "./WeirAuction.sol";
+import {IWeirAuction} from "./interfaces/IWeirAuction.sol";
 import {IRebateVault} from "./interfaces/IRebateVault.sol";
 
 /// @title WeirHook
@@ -27,7 +27,9 @@ contract WeirHook is IHooks {
     event GovernanceTransferred(address indexed oldGovernance, address indexed newGovernance);
 
     IPoolManager public immutable poolManager;
-    WeirAuction public immutable auction;
+    /// @dev An interface, not a concrete auction: the plaintext and CoFHE sealed-bid
+    ///      auctions expose the same epoch clock, so the hook works with either.
+    IWeirAuction public immutable auction;
     IRebateVault public immutable rebateVault;
 
     address public governance;
@@ -58,7 +60,7 @@ contract WeirHook is IHooks {
 
     constructor(
         IPoolManager _poolManager,
-        WeirAuction _auction,
+        IWeirAuction _auction,
         IRebateVault _rebateVault,
         address _governance,
         uint256 _priorityWindowBlocks

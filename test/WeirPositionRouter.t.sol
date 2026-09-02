@@ -17,6 +17,7 @@ import {WeirHook} from "../src/WeirHook.sol";
 import {WeirAuction} from "../src/WeirAuction.sol";
 import {WeirPositionRouter} from "../src/WeirPositionRouter.sol";
 import {RebateVault} from "../src/RebateVault.sol";
+import {IWeirAuction} from "../src/interfaces/IWeirAuction.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 
 /// @notice Proves that a rebate reaches the person who actually provided the liquidity, which is
@@ -53,10 +54,14 @@ contract WeirPositionRouterTest is Test, Deployers {
 
         uint160 flags =
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG);
-        bytes memory args = abi.encode(manager, auction, IRebateVault(address(vault)), address(this), PRIORITY_WINDOW);
+        bytes memory args = abi.encode(
+            manager, IWeirAuction(address(auction)), IRebateVault(address(vault)), address(this), PRIORITY_WINDOW
+        );
         (address expected, bytes32 salt) = HookMiner.find(address(this), flags, type(WeirHook).creationCode, args);
 
-        hook = new WeirHook{salt: salt}(manager, auction, IRebateVault(address(vault)), address(this), PRIORITY_WINDOW);
+        hook = new WeirHook{salt: salt}(
+            manager, IWeirAuction(address(auction)), IRebateVault(address(vault)), address(this), PRIORITY_WINDOW
+        );
         require(address(hook) == expected, "hook address mismatch");
 
         vault.setAuthorized(address(hook), true);

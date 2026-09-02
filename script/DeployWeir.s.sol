@@ -11,6 +11,7 @@ import {WeirAuction} from "../src/WeirAuction.sol";
 import {RebateVault} from "../src/RebateVault.sol";
 import {WeirPositionRouter} from "../src/WeirPositionRouter.sol";
 import {FairPriceOracle} from "../src/FairPriceOracle.sol";
+import {IWeirAuction} from "../src/interfaces/IWeirAuction.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 
 /// @notice Deploys the Weir stack and wires its authorizations.
@@ -55,11 +56,15 @@ contract DeployWeir is Script {
 
         uint160 flags =
             uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG);
-        bytes memory args = abi.encode(poolManager, auction, IRebateVault(address(vault)), governance, priorityWindow);
+        bytes memory args = abi.encode(
+            poolManager, IWeirAuction(address(auction)), IRebateVault(address(vault)), governance, priorityWindow
+        );
 
         (address expected, bytes32 salt) = HookMiner.find(CREATE2_DEPLOYER, flags, type(WeirHook).creationCode, args);
 
-        hook = new WeirHook{salt: salt}(poolManager, auction, IRebateVault(address(vault)), governance, priorityWindow);
+        hook = new WeirHook{salt: salt}(
+            poolManager, IWeirAuction(address(auction)), IRebateVault(address(vault)), governance, priorityWindow
+        );
         require(address(hook) == expected, "DeployWeir: hook address mismatch");
 
         router = new WeirPositionRouter(poolManager);

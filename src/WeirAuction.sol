@@ -7,8 +7,9 @@ import {IRebateVault} from "./interfaces/IRebateVault.sol";
 
 /// @title WeirAuction
 /// @notice Auctions per-epoch priority execution rights; winning bids fund the LP rebate vault.
-/// @dev Phase 1 runs plaintext bids. Phase 2 replaces the bid value with a Fhenix CoFHE
-///      ciphertext so competitors cannot observe each other's bids before an epoch closes.
+/// @dev Bids are plaintext, so every searcher can read every rival's bid before an epoch
+///      closes. `WeirSealedAuction` is the CoFHE variant that closes that gap; this one
+///      stays as the simpler baseline to measure it against.
 contract WeirAuction is IWeirAuction {
     error Unauthorized();
     error InvalidAddress();
@@ -46,6 +47,8 @@ contract WeirAuction is IWeirAuction {
     /// @notice Cumulative amount a bidder has committed to an epoch
     mapping(PoolId => mapping(uint256 => mapping(address => uint256))) public bidOf;
 
+    event BidPlaced(PoolId indexed poolId, uint256 indexed epoch, address indexed bidder, uint256 total);
+    event RefundClaimed(PoolId indexed poolId, uint256 indexed epoch, address indexed bidder, uint256 amount);
     event PoolConfigured(PoolId indexed poolId, uint256 epochBlocks, uint256 reservePrice);
     event ReservePriceUpdated(PoolId indexed poolId, uint256 reservePrice);
     event GovernanceTransferred(address indexed oldGovernance, address indexed newGovernance);
@@ -104,7 +107,7 @@ contract WeirAuction is IWeirAuction {
         return epochs[poolId][epoch].leader;
     }
 
-    /// @inheritdoc IWeirAuction
+    /// @notice Places (or tops up) a plaintext bid for the next epoch
     function bid(PoolId poolId) external payable {
         if (msg.value == 0) revert ZeroBid();
         if (startBlock[poolId] == 0) revert EpochNotStarted();
@@ -127,7 +130,7 @@ contract WeirAuction is IWeirAuction {
         emit BidPlaced(poolId, epoch, msg.sender, total);
     }
 
-    /// @inheritdoc IWeirAuction
+    /// @notice Moves a concluded epoch's winning bid into the rebate vault
     function settleEpoch(PoolId poolId, uint256 epoch) external {
         if (currentEpoch(poolId) < epoch) revert EpochNotStarted();
 
@@ -143,7 +146,7 @@ contract WeirAuction is IWeirAuction {
         emit EpochSettled(poolId, epoch, state.leader, amount);
     }
 
-    /// @inheritdoc IWeirAuction
+    /// @notice Refunds a losing bid once its epoch has settled
     function claimRefund(PoolId poolId, uint256 epoch) external returns (uint256 amount) {
         EpochState storage state = epochs[poolId][epoch];
         if (!state.settled) revert EpochNotSettled();

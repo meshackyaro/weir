@@ -1,4 +1,16 @@
 {
+  "lib/cofhe-contracts": {
+    "tag": {
+      "name": "v0.0.13",
+      "rev": "d41a6279600cf8c34878d0195488cfcfcee41bdc"
+    }
+  },
+  "lib/cofhe-mock-contracts": {
+    "tag": {
+      "name": "v0.3.1",
+      "rev": "14e5446de3f130bac92b6cd181a24be4559957a0"
+    }
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.16.2",

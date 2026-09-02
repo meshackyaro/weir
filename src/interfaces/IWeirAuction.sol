@@ -4,24 +4,21 @@ pragma solidity ^0.8.26;
 import {PoolId} from "v4-core/types/PoolId.sol";
 
 /// @title IWeirAuction
-/// @notice Per-block priority execution auction whose proceeds are rebated to LPs
+/// @notice What `WeirHook` needs from an auction to police an epoch's priority window.
+/// @dev Deliberately says nothing about how bids are placed or paid for. `WeirAuction` takes
+///      plaintext bids as `msg.value`; `WeirSealedAuction` takes CoFHE ciphertexts against
+///      pre-posted collateral. The hook works with either.
 interface IWeirAuction {
-    event BidPlaced(PoolId indexed poolId, uint256 indexed epoch, address indexed bidder, uint256 total);
     event EpochSettled(PoolId indexed poolId, uint256 indexed epoch, address winner, uint256 amount);
-    event RefundClaimed(PoolId indexed poolId, uint256 indexed epoch, address indexed bidder, uint256 amount);
 
     /// @notice Epoch currently executing for a pool
     function currentEpoch(PoolId poolId) external view returns (uint256);
 
-    /// @notice Leading bidder for an epoch. Address zero when no bid was placed.
+    /// @notice First block of an epoch, used by the hook to bound the priority window
+    function epochStartBlock(PoolId poolId, uint256 epoch) external view returns (uint256);
+
+    /// @notice Winner of an epoch. Address zero when nobody won, or when the result is not final
+    ///         yet — either way the epoch is open to everyone, so a stalled auction cannot
+    ///         freeze the pool.
     function winnerOf(PoolId poolId, uint256 epoch) external view returns (address);
-
-    /// @notice Places (or tops up) a bid for the next epoch
-    function bid(PoolId poolId) external payable;
-
-    /// @notice Moves a concluded epoch's winning bid into the rebate vault
-    function settleEpoch(PoolId poolId, uint256 epoch) external;
-
-    /// @notice Refunds a losing bid once its epoch has settled
-    function claimRefund(PoolId poolId, uint256 epoch) external returns (uint256);
 }
