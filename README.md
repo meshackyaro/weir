@@ -17,23 +17,44 @@ The price a searcher pays to jump the queue becomes the LP's compensation for th
 Two gaps in what exists today:
 
 1. **They need their own venue.** Systems that already return auction proceeds to LPs run a separate DEX with its own clearing-price matching engine. Weir ships as a single composable hook — any v4 pool can adopt it directly, no new venue, no liquidity migration.
-2. **Their bids are public.** Plaintext priority auctions let searchers observe each other and shade their bids, which suppresses what LPs ultimately collect. Weir's roadmap replaces the bid value with a Fhenix CoFHE ciphertext, so no competitor sees a rival's bid before the epoch closes and only the winning bid is ever decrypted.
+2. **Their bids are public.** Plaintext priority auctions let searchers observe each other and shade their bids, which suppresses what LPs ultimately collect. Weir replaces the bid value with a Fhenix CoFHE ciphertext, so no competitor sees a rival's bid before the epoch closes and only the winning bid is ever decrypted.
 
 ## Architecture
 
 | Contract | Role |
 |---|---|
 | `WeirHook` | v4 hook. Reserves each epoch's opening swap for the auction winner; reports LP liquidity changes to the vault. |
-| `WeirAuction` | Runs the per-epoch priority auction. Tracks bids, resolves the winner, forwards proceeds to the vault, refunds losers. |
+| `WeirAuction` | Plaintext per-epoch priority auction. The simple baseline. |
+| `WeirSealedAuction` | The same auction over Fhenix CoFHE ciphertexts. Bids are never readable; only the winning pair is decrypted. |
 | `RebateVault` | Accrues auction proceeds and pays them out pro-rata to LPs via a reward-per-liquidity accumulator. |
 | `WeirPositionRouter` | Liquidity entrypoint that lets the hook credit rebates to the actual provider. |
 | `FairPriceOracle` | Chainlink-backed reference price. Floors the auction reserve and checks executions after the fact. |
+
+Both auctions implement `IWeirAuction`, so the hook drives either one.
 
 ### Epoch and priority window
 
 Bidding for epoch `N+1` happens during epoch `N`, so an epoch's winner is already fixed before its first swap can land.
 
 Within `priorityWindowBlocks` of an epoch's start, only the winner may swap. After that window the pool is open to everyone — a winner who never shows up forfeits their bid rather than freezing the pool.
+
+## Sealed bids
+
+A priority auction whose bids are visible is a priority auction searchers can game. Rivals read each other, shade down to just above second place, and the difference comes out of the LPs' rebate. `WeirSealedAuction` closes that: the running highest bid and the address holding it are both CoFHE ciphertexts, folded forward with homomorphic `max` as each bid arrives. Only the winning pair is ever decrypted; every losing bid stays sealed forever.
+
+Two properties of FHE dictate the rest of the design.
+
+**Money cannot ride along with the bid.** A `msg.value` matching the bid would publish it. So a searcher posts collateral up front and later bids against a cap they choose. What an observer learns is the cap, not the bid — and searchers posting the same round cap are indistinguishable from each other. A bid above its cap is clamped rather than rejected, so "bid everything I have" stays a single transaction and a winner can always cover what they owe.
+
+**Decryption is asynchronous.** CoFHE answers a decryption request in a later block, never the requesting one, so a winner cannot be revealed in the transaction that closes the bidding. Bidding therefore runs two epochs ahead:
+
+```
+epoch N        epoch N+1              epoch N+2
+bids for N+2   closeBidding(N+2)      winner holds the priority slot
+               settleEpoch(N+2)
+```
+
+That leaves a full epoch for the coprocessor to answer. If it does not, `winnerOf` stays zero and the epoch trades openly — a stalled auction can slow a rebate, but it can never freeze a pool. Settlement is permissionless and safe to retry every block; Phase 3 puts it on Chainlink Automation.
 
 ### Who a rebate belongs to
 
@@ -45,9 +66,9 @@ Liquidity is tracked per position, not per tick range. True in-range weighting n
 
 ## Build roadmap
 
-- **Phase 1 — plaintext auction.** Auction, rebate vault, Chainlink price feed. Fully working on its own.
-- **Phase 2 — sealed bids.** Swap plaintext bid values for Fhenix CoFHE ciphertexts. This is the differentiator.
-- **Phase 3 — stretch.** Chainlink Automation for keeper-free settlement; EigenLayer AVS for decentralised winner resolution.
+- **Phase 1 — plaintext auction.** Auction, rebate vault, position router, Chainlink price feed, hook. Done.
+- **Phase 2 — sealed bids.** Bid values as Fhenix CoFHE ciphertexts. Done.
+- **Phase 3 — stretch.** Chainlink Automation for keeper-free settlement; the fair-price oracle wired into the reserve floor and post-trade clawback; EigenLayer AVS for decentralised winner resolution.
 
 ## Development
 
@@ -65,8 +86,16 @@ forge script script/DeployWeir.s.sol:DeployWeir --rpc-url unichain_sepolia --bro
 
 `GOVERNANCE` and `PRIORITY_WINDOW_BLOCKS` are optional; governance defaults to the deployer, and the script wires the vault authorizations and router trust for you when those match.
 
+`SEALED_BIDS=true` deploys `WeirSealedAuction` instead of the plaintext one. It needs a chain where CoFHE is live — without the coprocessor the auction deploys but no bid can be verified.
+
 ## Status
 
-Phase 1 complete: auction, rebate vault, position router, Chainlink price feed, hook, deploy script — 67 tests. Phase 2 (sealed bids) next.
+Phases 1 and 2 complete — 100 tests. Sealed bidding is tested against Fhenix's mock coprocessor, which reproduces the asynchronous decryption the real one imposes.
+
+Known limits, all deliberate:
+
+- Rebates are weighted by position liquidity, not by tick-range overlap. True in-range weighting needs per-tick accounting.
+- `FairPriceOracle` is deployed but not yet wired into the reserve floor.
+- Settlement needs a keeper until Chainlink Automation lands.
 
 Not audited. Not for production use.
