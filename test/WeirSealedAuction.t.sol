@@ -7,7 +7,12 @@ import {InEuint128, euint128, eaddress} from "@fhenixprotocol/cofhe-contracts/FH
 import {PoolId} from "v4-core/types/PoolId.sol";
 
 import {WeirSealedAuction} from "../src/WeirSealedAuction.sol";
+import {WeirAuctionBase} from "../src/WeirAuctionBase.sol";
 import {RebateVault} from "../src/RebateVault.sol";
+import {FairPriceOracle} from "../src/FairPriceOracle.sol";
+import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
+import {IAggregatorV3} from "../src/interfaces/IAggregatorV3.sol";
+import {IFairPriceOracle} from "../src/interfaces/IFairPriceOracle.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 
 /// @notice Exercises the CoFHE sealed-bid auction against Fhenix's mock coprocessor.
@@ -360,16 +365,52 @@ contract WeirSealedAuctionTest is Test, CoFheTest {
         assertEq(address(vault).balance, 1.4 ether);
     }
 
+    // ============ Oracle-backed reserve ============
+
+    /// @dev The reserve is compared homomorphically, so an oracle-derived floor has to survive
+    ///      being trivially encrypted at bid time. It does, and a bid under it is discarded the
+    ///      same way a bid under a fixed reserve is — without ever revealing what it was.
+    function test_theSealedReserveTracksTheOracle() public {
+        _useDollarReserve(5e18); // five dollars, ETH at two thousand
+
+        // 0.002 ETH is four dollars: under the reserve, so it never enters the running.
+        _bid(alice, 0.002 ether, CAP);
+        _resolve(2);
+
+        assertEq(auction.winnerOf(poolId, 2), address(0));
+    }
+
+    function test_aSealedBidClearingTheOracleReserveStillWins() public {
+        _useDollarReserve(5e18);
+
+        _bid(alice, 0.003 ether, CAP);
+        _resolve(2);
+
+        assertEq(auction.winnerOf(poolId, 2), alice);
+        assertEq(auction.epochState(poolId, 2).winningBid, 0.003 ether);
+    }
+
+    function _useDollarReserve(uint256 quote) internal {
+        FairPriceOracle oracle = new FairPriceOracle(address(this));
+        MockAggregatorV3 feed = new MockAggregatorV3(8, 2000e8);
+        oracle.registerFeed(poolId, IAggregatorV3(address(feed)), 1 hours);
+
+        // Drop the wei floor below the converted figure so the oracle is what actually binds.
+        auction.setReservePrice(poolId, 0.001 ether);
+        auction.setOracle(IFairPriceOracle(address(oracle)));
+        auction.setReserveQuote(poolId, quote);
+    }
+
     // ============ Governance ============
 
     function test_onlyGovernanceConfiguresAPool() public {
         vm.prank(alice);
-        vm.expectRevert(WeirSealedAuction.Unauthorized.selector);
+        vm.expectRevert(WeirAuctionBase.Unauthorized.selector);
         auction.configurePool(PoolId.wrap(keccak256("other")), EPOCH_BLOCKS, RESERVE_PRICE);
     }
 
     function test_epochLengthIsFixedAtConfiguration() public {
-        vm.expectRevert(WeirSealedAuction.PoolAlreadyConfigured.selector);
+        vm.expectRevert(WeirAuctionBase.PoolAlreadyConfigured.selector);
         auction.configurePool(poolId, 20, RESERVE_PRICE);
     }
 }

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {PoolId} from "v4-core/types/PoolId.sol";
+import {WeirAuctionBase} from "./WeirAuctionBase.sol";
 import {IWeirAuction} from "./interfaces/IWeirAuction.sol";
 import {IRebateVault} from "./interfaces/IRebateVault.sol";
 
@@ -10,18 +11,12 @@ import {IRebateVault} from "./interfaces/IRebateVault.sol";
 /// @dev Bids are plaintext, so every searcher can read every rival's bid before an epoch
 ///      closes. `WeirSealedAuction` is the CoFHE variant that closes that gap; this one
 ///      stays as the simpler baseline to measure it against.
-contract WeirAuction is IWeirAuction {
-    error Unauthorized();
-    error InvalidAddress();
-    error InvalidEpochLength();
-    error PoolAlreadyConfigured();
+contract WeirAuction is IWeirAuction, WeirAuctionBase {
     error BidBelowReserve();
-    error EpochNotStarted();
     error EpochAlreadySettled();
     error EpochNotSettled();
     error NothingToRefund();
     error WinnerCannotRefund();
-    error TransferFailed();
     error ZeroBid();
 
     struct EpochState {
@@ -30,18 +25,6 @@ contract WeirAuction is IWeirAuction {
         bool settled;
     }
 
-    address public governance;
-    IRebateVault public immutable rebateVault;
-
-    /// @notice Block at which epoch 0 began for a pool
-    mapping(PoolId => uint256) public startBlock;
-
-    /// @notice Length of an auction epoch, in blocks
-    mapping(PoolId => uint256) public epochBlocks;
-
-    /// @notice Minimum bid accepted for a pool
-    mapping(PoolId => uint256) public reservePrice;
-
     mapping(PoolId => mapping(uint256 => EpochState)) public epochs;
 
     /// @notice Cumulative amount a bidder has committed to an epoch
@@ -49,61 +32,11 @@ contract WeirAuction is IWeirAuction {
 
     event BidPlaced(PoolId indexed poolId, uint256 indexed epoch, address indexed bidder, uint256 total);
     event RefundClaimed(PoolId indexed poolId, uint256 indexed epoch, address indexed bidder, uint256 amount);
-    event PoolConfigured(PoolId indexed poolId, uint256 epochBlocks, uint256 reservePrice);
-    event ReservePriceUpdated(PoolId indexed poolId, uint256 reservePrice);
-    event GovernanceTransferred(address indexed oldGovernance, address indexed newGovernance);
 
-    modifier onlyGovernance() {
-        if (msg.sender != governance) revert Unauthorized();
-        _;
-    }
-
-    constructor(address _governance, IRebateVault _rebateVault) {
-        if (_governance == address(0) || address(_rebateVault) == address(0)) revert InvalidAddress();
-        governance = _governance;
-        rebateVault = _rebateVault;
-    }
-
-    /// @notice Opens auctions for a pool and anchors its epoch clock to the current block
-    /// @dev Epoch length is fixed at configuration time. Changing it later would renumber every
-    ///      past epoch, orphaning their settlement state and refunds. Use `setReservePrice` to
-    ///      adjust the one parameter that is safe to move.
-    function configurePool(PoolId poolId, uint256 _epochBlocks, uint256 _reservePrice) external onlyGovernance {
-        if (_epochBlocks == 0) revert InvalidEpochLength();
-        if (startBlock[poolId] != 0) revert PoolAlreadyConfigured();
-
-        startBlock[poolId] = block.number;
-        epochBlocks[poolId] = _epochBlocks;
-        reservePrice[poolId] = _reservePrice;
-
-        emit PoolConfigured(poolId, _epochBlocks, _reservePrice);
-    }
-
-    function setReservePrice(PoolId poolId, uint256 _reservePrice) external onlyGovernance {
-        reservePrice[poolId] = _reservePrice;
-        emit ReservePriceUpdated(poolId, _reservePrice);
-    }
-
-    function transferGovernance(address newGovernance) external onlyGovernance {
-        if (newGovernance == address(0)) revert InvalidAddress();
-        emit GovernanceTransferred(governance, newGovernance);
-        governance = newGovernance;
-    }
+    constructor(address _governance, IRebateVault _rebateVault) WeirAuctionBase(_governance, _rebateVault) {}
 
     /// @inheritdoc IWeirAuction
-    function currentEpoch(PoolId poolId) public view returns (uint256) {
-        uint256 start = startBlock[poolId];
-        if (start == 0) return 0;
-        return (block.number - start) / epochBlocks[poolId];
-    }
-
-    /// @notice First block of an epoch, used by the hook to bound the priority window
-    function epochStartBlock(PoolId poolId, uint256 epoch) public view returns (uint256) {
-        return startBlock[poolId] + (epoch * epochBlocks[poolId]);
-    }
-
-    /// @inheritdoc IWeirAuction
-    function winnerOf(PoolId poolId, uint256 epoch) external view returns (address) {
+    function winnerOf(PoolId poolId, uint256 epoch) external view override returns (address) {
         return epochs[poolId][epoch].leader;
     }
 
@@ -117,7 +50,7 @@ contract WeirAuction is IWeirAuction {
         uint256 epoch = currentEpoch(poolId) + 1;
 
         uint256 total = bidOf[poolId][epoch][msg.sender] + msg.value;
-        if (total < reservePrice[poolId]) revert BidBelowReserve();
+        if (total < reservePrice(poolId)) revert BidBelowReserve();
 
         bidOf[poolId][epoch][msg.sender] = total;
 

@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {RebateVault} from "../src/RebateVault.sol";
 import {WeirAuction} from "../src/WeirAuction.sol";
+import {WeirAuctionBase} from "../src/WeirAuctionBase.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 
 contract WeirAuctionTest is Test {
@@ -143,7 +144,7 @@ contract WeirAuctionTest is Test {
         auction.bid{value: 1 ether}(poolId);
 
         uint256 target = auction.currentEpoch(poolId) + 1;
-        vm.expectRevert(WeirAuction.EpochNotStarted.selector);
+        vm.expectRevert(WeirAuctionBase.EpochNotStarted.selector);
         auction.settleEpoch(poolId, target);
     }
 
@@ -180,13 +181,13 @@ contract WeirAuctionTest is Test {
 
     function test_onlyGovernanceConfigures() public {
         vm.prank(searcherA);
-        vm.expectRevert(WeirAuction.Unauthorized.selector);
+        vm.expectRevert(WeirAuctionBase.Unauthorized.selector);
         auction.configurePool(poolId, 10, RESERVE);
     }
 
     function test_epochLengthCannotBeChangedAfterConfiguration() public {
         vm.prank(governance);
-        vm.expectRevert(WeirAuction.PoolAlreadyConfigured.selector);
+        vm.expectRevert(WeirAuctionBase.PoolAlreadyConfigured.selector);
         auction.configurePool(poolId, 10, RESERVE);
     }
 
