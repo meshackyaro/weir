@@ -163,6 +163,33 @@ contract WeirSealedAuction is IWeirAuction {
         return _epochs[poolId][epoch];
     }
 
+    /// @notice Whether anyone has bid on an epoch yet
+    /// @dev A keeper uses this to leave quiet pools alone: closing an epoch nobody bid on costs
+    ///      gas and changes nothing that matters.
+    function hasBids(PoolId poolId, uint256 epoch) external view returns (bool) {
+        return euint128.unwrap(_epochs[poolId][epoch].leadingBid) != 0;
+    }
+
+    /// @notice Whether `closeBidding` would be accepted for an epoch right now
+    function biddingClosable(PoolId poolId, uint256 epoch) external view returns (bool) {
+        if (startBlock[poolId] == 0 || epoch < BID_LEAD_EPOCHS) return false;
+        if (currentEpoch(poolId) < epoch - BID_LEAD_EPOCHS + 1) return false;
+        return !_epochs[poolId][epoch].closed;
+    }
+
+    /// @notice Whether the coprocessor has answered, so `settleEpoch` would succeed rather than
+    ///         revert with `DecryptionPending`
+    /// @dev Exists so a keeper can tell "not yet" from "something is wrong" without simulating a
+    ///      transaction that is expected to revert most of the time.
+    function settlementReady(PoolId poolId, uint256 epoch) external view returns (bool) {
+        EpochState storage state = _epochs[poolId][epoch];
+        if (!state.closed || state.settled) return false;
+
+        (, bool bidReady) = FHE.getDecryptResultSafe(state.leadingBid);
+        (, bool leaderReady) = FHE.getDecryptResultSafe(state.leader);
+        return bidReady && leaderReady;
+    }
+
     // ============ Collateral ============
 
     /// @notice Posts ETH a sealed bid can later be drawn against
