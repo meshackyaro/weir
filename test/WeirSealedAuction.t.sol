@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {CoFheTest} from "cofhe-mocks/CoFheTest.sol";
-import {InEuint128, euint128} from "@fhenixprotocol/cofhe-contracts/FHE.sol";
+import {InEuint128, euint128, eaddress} from "@fhenixprotocol/cofhe-contracts/FHE.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 
 import {WeirSealedAuction} from "../src/WeirSealedAuction.sol";
@@ -131,15 +131,30 @@ contract WeirSealedAuctionTest is Test, CoFheTest {
         assertEq(state.winner, address(0), "no winner is named before settlement");
         assertEq(state.winningBid, 0, "no amount is named before settlement");
         assertEq(auction.winnerOf(poolId, 2), address(0));
+
+        // The handles are pointers into the coprocessor, and it has been asked to reveal
+        // nothing, so neither the leading bid nor its holder can be read off chain either.
+        (, bool bidReadable) = taskManager.getDecryptResultSafe(euint128.unwrap(state.leadingBid));
+        (, bool leaderReadable) = taskManager.getDecryptResultSafe(eaddress.unwrap(state.leader));
+        assertFalse(bidReadable, "the leading bid is not decryptable while bidding is open");
+        assertFalse(leaderReadable, "nor is the address holding it");
     }
 
-    /// @dev Two searchers who commit the same collateral are indistinguishable on chain even
-    ///      though they bid very different amounts. That is the anonymity set the cap buys.
-    function test_equalCapsLookIdenticalRegardlessOfBid() public {
+    /// @dev Collateral is the one thing bidding does leak, and it leaks the cap rather than the
+    ///      bid. Two searchers who commit the same cap leave the same public trace behind even
+    ///      though one bid fifty times the other — that is the anonymity set the cap buys.
+    function test_equalCapsLeaveTheSameTraceRegardlessOfBid() public {
         _bid(alice, 0.02 ether, CAP);
         _bid(bob, 0.99 ether, CAP);
 
         assertEq(auction.lockOf(poolId, 2, alice), auction.lockOf(poolId, 2, bob));
+        assertEq(auction.freeCollateral(alice), auction.freeCollateral(bob));
+        assertEq(auction.collateral(alice), auction.collateral(bob));
+
+        // And the difference only surfaces once the epoch resolves, for the winner alone.
+        _resolve(2);
+        assertEq(auction.winnerOf(poolId, 2), bob);
+        assertEq(auction.epochState(poolId, 2).winningBid, 0.99 ether);
     }
 
     function test_winnerIsUnknownUntilTheCoprocessorAnswers() public {
