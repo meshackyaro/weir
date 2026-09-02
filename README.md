@@ -28,7 +28,7 @@ Two gaps in what exists today:
 | `WeirSealedAuction` | The same auction over Fhenix CoFHE ciphertexts. Bids are never readable; only the winning pair is decrypted. |
 | `RebateVault` | Accrues auction proceeds and pays them out pro-rata to LPs via a reward-per-liquidity accumulator. |
 | `WeirPositionRouter` | Liquidity entrypoint that lets the hook credit rebates to the actual provider. |
-| `FairPriceOracle` | Chainlink-backed reference price. Floors the auction reserve and checks executions after the fact. |
+| `FairPriceOracle` | Chainlink-backed reference price. Keeps the auction reserve worth a fixed amount as ETH moves. |
 | `WeirKeeper` | Chainlink Automation upkeep that closes and settles each sealed epoch on time. |
 
 Both auctions implement `IWeirAuction`, so the hook drives either one.
@@ -65,6 +65,14 @@ Both of those transactions have to happen on schedule, and nobody has a private 
 
 The keeper holds no privilege the public does not. Both calls behind it are permissionless on the auction and guard themselves, so `performData` needs no trust and an Automation outage costs punctuality, not funds — the bidders whose collateral is locked can always drive the auction by hand.
 
+### The reserve floor
+
+A reserve fixed in wei silently changes meaning every time ETH moves. Set it at five dollars when ETH is two thousand, and it is a ten dollar reserve when ETH halves — quietly pricing searchers out and starving LPs of the rebate the reserve exists to protect.
+
+Governance can set the floor in the feed's quote unit instead, and `FairPriceOracle` converts it at the current price. The wei figure stays underneath as a hard minimum, so the oracle can raise the bar and never lower it: a feed reporting an absurd price cannot make bids nearly free. A missing, zeroed or stale feed falls back to that floor rather than reverting — failing closed would stop bidding altogether, which is the opposite of what a reserve is for.
+
+Weir prices bids in ETH, so the feed registered for a pool must price ETH in the reserve's unit. For an ETH-paired pool that is one feed doing both jobs: the same ETH/USD feed keeps a dollar reserve honest and judges execution quality after the fact.
+
 ### Who a rebate belongs to
 
 Uniswap v4 records whoever calls `modifyLiquidity` as the position owner, so a hook sees a router, never the person behind it. Left alone, that sends every rebate to the router.
@@ -77,7 +85,7 @@ Liquidity is tracked per position, not per tick range. True in-range weighting n
 
 - **Phase 1 — plaintext auction.** Auction, rebate vault, position router, Chainlink price feed, hook. Done.
 - **Phase 2 — sealed bids.** Bid values as Fhenix CoFHE ciphertexts. Done.
-- **Phase 3 — automation and oracles.** Chainlink Automation for punctual settlement. Done. The fair-price oracle wired into the reserve floor and post-trade clawback, and an EigenLayer AVS for decentralised winner resolution, remain.
+- **Phase 3 — automation and oracles.** Chainlink Automation for punctual settlement, and the fair-price oracle behind the reserve. Done. Post-trade clawback against the oracle, and an EigenLayer AVS for decentralised winner resolution, remain.
 
 ## Development
 
@@ -99,12 +107,12 @@ forge script script/DeployWeir.s.sol:DeployWeir --rpc-url unichain_sepolia --bro
 
 ## Status
 
-Phases 1 and 2 complete, Automation landed — 118 tests. Sealed bidding is tested against Fhenix's mock coprocessor, which reproduces the asynchronous decryption the real one imposes.
+Phases 1 and 2 complete, Automation and the oracle reserve landed — 136 tests. Sealed bidding is tested against Fhenix's mock coprocessor, which reproduces the asynchronous decryption the real one imposes.
 
 Known limits, all deliberate:
 
 - Rebates are weighted by position liquidity, not by tick-range overlap. True in-range weighting needs per-tick accounting.
-- `FairPriceOracle` is deployed but not yet wired into the reserve floor.
+- `isWithinTolerance` exists but nothing calls it yet: post-trade clawback is designed, not built.
 - The keeper's catch-up window is bounded at three epochs; anything older falls to the permissionless path.
 
 Not audited. Not for production use.
