@@ -103,6 +103,8 @@ forge script script/DeployWeir.s.sol:DeployWeir --rpc-url unichain_sepolia --bro
 
 `GOVERNANCE` and `PRIORITY_WINDOW_BLOCKS` are optional; governance defaults to the deployer, and the script wires the vault authorizations and router trust for you when those match.
 
+See [DEPLOY.md](DEPLOY.md) for the full runbook, including which chains can host a sealed-bid deployment and how to drive an epoch end to end.
+
 `SEALED_BIDS=true` deploys `WeirSealedAuction` and its keeper instead of the plaintext auction. It needs a chain where CoFHE is live — without the coprocessor the auction deploys but no bid can be verified. Register each pool on the keeper and point a Chainlink Automation upkeep at it afterwards; the script prints the calls.
 
 ## Status

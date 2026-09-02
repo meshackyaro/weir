@@ -1,0 +1,13 @@
+{
+  "name": "weir-demo",
+  "private": true,
+  "type": "module",
+  "description": "Drives a full sealed-bid epoch against deployed Weir contracts.",
+  "scripts": {
+    "bid": "node sealed-bid.mjs"
+  },
+  "dependencies": {
+    "cofhejs": "^0.3.1",
+    "ethers": "^6.13.0"
+  }
+}

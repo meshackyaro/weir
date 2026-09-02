@@ -24,9 +24,12 @@ remappings = [
 ]
 
 [rpc_endpoints]
+# CoFHE and Uniswap v4 are both live here, which is why it is the default target.
+sepolia = "${SEPOLIA_RPC:-https://ethereum-sepolia-rpc.publicnode.com}"
 unichain_sepolia = "${UNICHAIN_SEPOLIA_RPC}"
 base_sepolia = "${BASE_SEPOLIA_RPC}"
 
 [etherscan]
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
 unichain_sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://unichain-sepolia.blockscout.com/api" }
 base_sepolia = { key = "${ETHERSCAN_API_KEY}", url = "https://base-sepolia.blockscout.com/api" }
