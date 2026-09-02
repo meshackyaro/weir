@@ -1,5 +1,9 @@
 # Deploying Weir
 
+**Testnets only.** Weir is unaudited and not for production use. Both deploy scripts allowlist
+testnet chain IDs and revert with `NotATestnet` anywhere else, so a stray `--rpc-url` cannot put
+this code in front of real funds.
+
 Weir needs two things on the same chain: a Uniswap v4 `PoolManager` and Fhenix's CoFHE
 coprocessor. **Ethereum Sepolia (11155111) is the only network where both are live**, so that is
 the target for a sealed-bid deployment.

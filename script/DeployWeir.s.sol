@@ -15,6 +15,7 @@ import {WeirPositionRouter} from "../src/WeirPositionRouter.sol";
 import {FairPriceOracle} from "../src/FairPriceOracle.sol";
 import {IWeirAuction} from "../src/interfaces/IWeirAuction.sol";
 import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
+import {TestnetOnly} from "./TestnetOnly.sol";
 
 /// @notice Deploys the Weir stack and wires its authorizations.
 /// @dev The hook is mined to an address whose bottom 14 bits encode its permissions, then
@@ -30,7 +31,7 @@ import {IRebateVault} from "../src/interfaces/IRebateVault.sol";
 ///   GOVERNANCE (defaults to the broadcasting address)
 ///   PRIORITY_WINDOW_BLOCKS (defaults to 2)
 ///   SEALED_BIDS (defaults to false; requires a chain where CoFHE is deployed)
-contract DeployWeir is Script {
+contract DeployWeir is Script, TestnetOnly {
     /// @dev Deterministic CREATE2 proxy, present at the same address on every major chain.
     address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
@@ -38,6 +39,7 @@ contract DeployWeir is Script {
 
     function run()
         external
+        testnetOnly
         returns (
             RebateVault vault,
             IWeirAuction auction,

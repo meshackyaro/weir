@@ -12,6 +12,7 @@ import {WeirPositionRouter} from "../src/WeirPositionRouter.sol";
 import {WeirSealedAuction} from "../src/WeirSealedAuction.sol";
 import {WeirKeeper} from "../src/WeirKeeper.sol";
 import {DemoERC20} from "../src/mocks/DemoERC20.sol";
+import {TestnetOnly} from "./TestnetOnly.sol";
 
 /// @notice Stands up a pool on a live network so the deployed stack has something to run against.
 /// @dev Mints a fresh token pair, initialises the pool behind the Weir hook, opens the auction on
@@ -26,7 +27,7 @@ import {DemoERC20} from "../src/mocks/DemoERC20.sol";
 /// Optional env:
 ///   WEIR_KEEPER (registers the pool for automated settlement)
 ///   EPOCH_BLOCKS (default 30), RESERVE_PRICE_WEI (default 0.0001 ether)
-contract SetupDemoPool is Script {
+contract SetupDemoPool is Script, TestnetOnly {
     using PoolIdLibrary for PoolKey;
 
     /// @dev 1:1, the standard v4 starting price.
@@ -41,7 +42,7 @@ contract SetupDemoPool is Script {
     uint256 internal constant MINT_AMOUNT = 1_000_000e18;
     int256 internal constant LIQUIDITY = 1e18;
 
-    function run() external returns (PoolKey memory key, PoolId poolId) {
+    function run() external testnetOnly returns (PoolKey memory key, PoolId poolId) {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         WeirPositionRouter router = WeirPositionRouter(payable(vm.envAddress("WEIR_POSITION_ROUTER")));
 

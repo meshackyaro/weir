@@ -117,4 +117,4 @@ Known limits, all deliberate:
 - `isWithinTolerance` exists but nothing calls it yet: post-trade clawback is designed, not built.
 - The keeper's catch-up window is bounded at three epochs; anything older falls to the permissionless path.
 
-Not audited. Not for production use.
+Not audited. Not for production use — the deploy scripts refuse to run anywhere but a testnet.
