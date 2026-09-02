@@ -9,6 +9,7 @@ import {HookMiner} from "v4-periphery-test/shared/HookMiner.sol";
 import {WeirHook} from "../src/WeirHook.sol";
 import {WeirAuction} from "../src/WeirAuction.sol";
 import {WeirSealedAuction} from "../src/WeirSealedAuction.sol";
+import {WeirKeeper} from "../src/WeirKeeper.sol";
 import {RebateVault} from "../src/RebateVault.sol";
 import {WeirPositionRouter} from "../src/WeirPositionRouter.sol";
 import {FairPriceOracle} from "../src/FairPriceOracle.sol";
@@ -42,7 +43,8 @@ contract DeployWeir is Script {
             IWeirAuction auction,
             WeirHook hook,
             WeirPositionRouter router,
-            FairPriceOracle oracle
+            FairPriceOracle oracle,
+            WeirKeeper keeper
         )
     {
         uint256 pk = vm.envUint("PRIVATE_KEY");
@@ -58,6 +60,10 @@ contract DeployWeir is Script {
             ? IWeirAuction(address(new WeirSealedAuction(governance, IRebateVault(address(vault)))))
             : IWeirAuction(address(new WeirAuction(governance, IRebateVault(address(vault)))));
         oracle = new FairPriceOracle(governance);
+
+        // Only the sealed auction has a two-step epoch lifecycle worth automating; the plaintext
+        // one settles in a single call anybody can make.
+        if (sealedBids) keeper = new WeirKeeper(WeirSealedAuction(address(auction)), governance);
 
         IPoolManager poolManager = IPoolManager(vm.envAddress("POOL_MANAGER"));
         hook = _deployHook(poolManager, auction, vault, governance);
@@ -82,11 +88,19 @@ contract DeployWeir is Script {
             console2.log("  hook.setTrustedRouter(router, true)");
         }
 
+        if (sealedBids) {
+            console2.log("Register each pool on the keeper, then register the keeper as a");
+            console2.log("Chainlink Automation upkeep and set its forwarder:");
+            console2.log("  keeper.registerPool(poolId)");
+            console2.log("  keeper.setForwarder(forwarder)");
+        }
+
         console2.log("RebateVault    ", address(vault));
         console2.log(sealedBids ? "SealedAuction  " : "WeirAuction    ", address(auction));
         console2.log("WeirHook       ", address(hook));
         console2.log("PositionRouter ", address(router));
         console2.log("FairPriceOracle", address(oracle));
+        if (sealedBids) console2.log("WeirKeeper     ", address(keeper));
         console2.log("governance     ", governance);
     }
 

@@ -29,6 +29,7 @@ Two gaps in what exists today:
 | `RebateVault` | Accrues auction proceeds and pays them out pro-rata to LPs via a reward-per-liquidity accumulator. |
 | `WeirPositionRouter` | Liquidity entrypoint that lets the hook credit rebates to the actual provider. |
 | `FairPriceOracle` | Chainlink-backed reference price. Floors the auction reserve and checks executions after the fact. |
+| `WeirKeeper` | Chainlink Automation upkeep that closes and settles each sealed epoch on time. |
 
 Both auctions implement `IWeirAuction`, so the hook drives either one.
 
@@ -54,7 +55,15 @@ bids for N+2   closeBidding(N+2)      winner holds the priority slot
                settleEpoch(N+2)
 ```
 
-That leaves a full epoch for the coprocessor to answer. If it does not, `winnerOf` stays zero and the epoch trades openly — a stalled auction can slow a rebate, but it can never freeze a pool. Settlement is permissionless and safe to retry every block; Phase 3 puts it on Chainlink Automation.
+That leaves a full epoch for the coprocessor to answer. If it does not, `winnerOf` stays zero and the epoch trades openly — a stalled auction can slow a rebate, but it can never freeze a pool.
+
+### Who closes and settles
+
+Both of those transactions have to happen on schedule, and nobody has a private reason to send them on time. A bidder will settle eventually, to unlock their collateral — but eventually is after the slot they paid for has passed.
+
+`WeirKeeper` makes it somebody's job. It is a Chainlink Automation upkeep that watches a set of registered pools and, each block, sends at most one transaction: settle an epoch whose decryption has landed, or close one whose bidding is over. Settling outranks closing, because a closed epoch is one whose deadline is already running. Pools nobody bid on are skipped rather than closed for nothing.
+
+The keeper holds no privilege the public does not. Both calls behind it are permissionless on the auction and guard themselves, so `performData` needs no trust and an Automation outage costs punctuality, not funds — the bidders whose collateral is locked can always drive the auction by hand.
 
 ### Who a rebate belongs to
 
@@ -68,7 +77,7 @@ Liquidity is tracked per position, not per tick range. True in-range weighting n
 
 - **Phase 1 — plaintext auction.** Auction, rebate vault, position router, Chainlink price feed, hook. Done.
 - **Phase 2 — sealed bids.** Bid values as Fhenix CoFHE ciphertexts. Done.
-- **Phase 3 — stretch.** Chainlink Automation for keeper-free settlement; the fair-price oracle wired into the reserve floor and post-trade clawback; EigenLayer AVS for decentralised winner resolution.
+- **Phase 3 — automation and oracles.** Chainlink Automation for punctual settlement. Done. The fair-price oracle wired into the reserve floor and post-trade clawback, and an EigenLayer AVS for decentralised winner resolution, remain.
 
 ## Development
 
@@ -86,16 +95,16 @@ forge script script/DeployWeir.s.sol:DeployWeir --rpc-url unichain_sepolia --bro
 
 `GOVERNANCE` and `PRIORITY_WINDOW_BLOCKS` are optional; governance defaults to the deployer, and the script wires the vault authorizations and router trust for you when those match.
 
-`SEALED_BIDS=true` deploys `WeirSealedAuction` instead of the plaintext one. It needs a chain where CoFHE is live — without the coprocessor the auction deploys but no bid can be verified.
+`SEALED_BIDS=true` deploys `WeirSealedAuction` and its keeper instead of the plaintext auction. It needs a chain where CoFHE is live — without the coprocessor the auction deploys but no bid can be verified. Register each pool on the keeper and point a Chainlink Automation upkeep at it afterwards; the script prints the calls.
 
 ## Status
 
-Phases 1 and 2 complete — 100 tests. Sealed bidding is tested against Fhenix's mock coprocessor, which reproduces the asynchronous decryption the real one imposes.
+Phases 1 and 2 complete, Automation landed — 118 tests. Sealed bidding is tested against Fhenix's mock coprocessor, which reproduces the asynchronous decryption the real one imposes.
 
 Known limits, all deliberate:
 
 - Rebates are weighted by position liquidity, not by tick-range overlap. True in-range weighting needs per-tick accounting.
 - `FairPriceOracle` is deployed but not yet wired into the reserve floor.
-- Settlement needs a keeper until Chainlink Automation lands.
+- The keeper's catch-up window is bounded at three epochs; anything older falls to the permissionless path.
 
 Not audited. Not for production use.
