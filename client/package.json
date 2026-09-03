@@ -1,8 +1,8 @@
 {
-  "name": "weir-demo",
+  "name": "weir-client",
   "private": true,
   "type": "module",
-  "description": "Drives a full sealed-bid epoch against deployed Weir contracts.",
+  "description": "Client for placing sealed bids against deployed Weir contracts.",
   "scripts": {
     "bid": "node sealed-bid.mjs"
   },

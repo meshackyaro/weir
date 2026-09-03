@@ -29,7 +29,7 @@ Weir integrates two hookathon partners. Both are load-bearing — remove either 
 
 This is the project's differentiator, and it dictated two structural decisions documented under [Sealed bids](#sealed-bids): collateral is posted separately from the bid, because a matching `msg.value` would publish it; and bidding runs two epochs ahead, because CoFHE decrypts asynchronously and a winner must be on record before their epoch begins.
 
-Built against `cofhe-contracts` v0.0.13 and tested against Fhenix's `cofhe-mock-contracts`, which reproduce the asynchronous decryption the live coprocessor imposes. `demo/weir.mjs` encrypts bids with `cofhejs` — a sealed bid cannot be produced from Solidity, since CoFHE only accepts a ciphertext its verifier has signed.
+Built against `cofhe-contracts` v0.0.13 and tested against Fhenix's `cofhe-mock-contracts`, which reproduce the asynchronous decryption the live coprocessor imposes. `client/weir.mjs` encrypts bids with `cofhejs` — a sealed bid cannot be produced from Solidity, since CoFHE only accepts a ciphertext its verifier has signed.
 
 ### Chainlink — Price Feeds and Automation
 

@@ -1,8 +1,8 @@
-// Drives a sealed-bid epoch against a deployed Weir stack.
+// Client for a deployed Weir stack: places sealed bids and drives an epoch's lifecycle.
 //
 // A sealed bid cannot be produced from Solidity. CoFHE only accepts a ciphertext that its
-// verifier has signed, and that signature comes from encrypting client-side — so the bidding
-// half of the demo lives here rather than in a forge script.
+// verifier has signed, and that signature comes from encrypting client-side — so bidding lives
+// here rather than in a forge script.
 //
 //   node weir.mjs status
 //   node weir.mjs deposit 0.02

@@ -50,11 +50,11 @@ decryption latency, because the winner of epoch `N+2` is decrypted during epoch 
 ## 3. Run a sealed epoch
 
 A sealed bid **cannot be produced from Solidity**. CoFHE only accepts a ciphertext its verifier
-has signed, and that signature comes from encrypting client-side. So the bidding half of the demo
-is a Node script.
+has signed, and that signature comes from encrypting client-side. So bidding happens through the
+Node client rather than a forge script.
 
 ```bash
-cd demo && npm install
+cd client && npm install
 
 export RPC_URL=$SEPOLIA_RPC WEIR_AUCTION=... POOL_ID=0x...
 
